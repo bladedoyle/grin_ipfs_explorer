@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Grin Blockchain Explorer on IPFS</title>
+    <script language="javascript"  src="http://code.jquery.com/jquery-1.4.2.min.js"></script>
+  </head>
+
+  <body>
+    <div id="listingTable"></div>
+    <a href="javascript:prevPage()" id="btn_prev">Prev</a>
+    <a href="javascript:nextPage()" id="btn_next">Next</a>
+    <span id="page"></span>
+
+  </body>
+
+  <script>
+    var pageCount = getNumBlocks();
+    var current_page = pageCount;
+
+    function prevPage()
+    {
+        if (current_page > 1) {
+            current_page--;
+            changePage(current_page);
+        }
+    }
+
+    function nextPage()
+    {
+        if (current_page < pageCount) {
+            current_page++;
+            changePage(current_page);
+        }
+    }
+
+    function changePage(page)
+    {
+        var btn_next = document.getElementById("btn_next");
+        var btn_prev = document.getElementById("btn_prev");
+        var listing_table = document.getElementById("listingTable");
+        var page_span = document.getElementById("page");
+    
+        // Validate page
+        if (page < 1) page = 1;
+        if (page > pageCount) page = pageCount;
+    
+        listing_table.innerHTML = "";
+    
+        //listing_table.innerHTML += "Chain Height: " + pageCount + "<br>";
+
+	var block_data = getBlockData(page)
+	var block_string = JSON.stringify(block_data,null,'\t');
+	    listing_table.innerHTML += "Block Data for height " + page + ":<br><br>" + block_string + "<br><br>";
+    
+	page_span.innerHTML = ""; // Whats this?
+    
+        if (page == 1) {
+            btn_prev.style.visibility = "hidden";
+        } else {
+            btn_prev.style.visibility = "visible";
+        }
+    
+        if (page == pageCount) {
+            btn_next.style.visibility = "hidden";
+        } else {
+            btn_next.style.visibility = "visible";
+        }
+    }
+    
+    // Get content of url as json
+    function getJson(url){
+      var request = new XMLHttpRequest();
+      request.open('GET', 'https://grinblocks.online/ipns/k51qzi5uqu5di6j7rwnp4b2bb98nh1dwypwaymemx044kwnap8d0p1qmghhjpf/'+url, false);
+      request.send(null);
+      return JSON.parse(request.responseText);
+    }
+
+    // Get num blocks
+    function getNumBlocks() {
+      var height_data = getJson('height') 
+      return parseInt(height_data["height"])
+    }
+
+    // Get block by height as JSON
+    function getBlockData(height) {
+      var dir = Math.trunc(parseInt(height) / 10000)
+      var data = getJson(dir + '/' + height)
+      return data
+    }
+
+window.onload = function() {
+    changePage(pageCount);
+};
+  </script>
+</html>
