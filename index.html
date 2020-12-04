@@ -7,14 +7,19 @@
   </head>
 
   <body>
-    <div id="listingTable"></div>
-    <a href="javascript:prevPage()" id="btn_prev">Prev</a>
+    <h1>Grin Blockchain Explorer on IPFS</h1>
+    Block Navigation:&nbsp;&nbsp;
+    <a href="javascript:prevPage()" id="btn_prev">Previous</a>
+    &nbsp;&nbsp;
     <a href="javascript:nextPage()" id="btn_next">Next</a>
+    <br><br>
+    <div id="listingTable"></div>
     <span id="page"></span>
 
   </body>
 
-  <script>
+<script>
+    var base_url = window.location.origin + "/ipns/k51qzi5uqu5di6j7rwnp4b2bb98nh1dwypwaymemx044kwnap8d0p1qmghhjpf" // + window.location.pathname.split( '/' )[2]
     var pageCount = getNumBlocks();
     var current_page = pageCount;
 
@@ -49,29 +54,34 @@
     
 	var block_data = getBlockData(page)
 	var block_string = JSON.stringify(block_data,null,'\t');
-	    listing_table.innerHTML += "Viewing Block Data for height " + page + "(of " +pageCount + "):<br><br>" + block_string + "<br><br>";
+
+        listing_table.innerHTML += "Viewing Block Data for height " + page + " (of " +pageCount + "):<br><br><pre>" + block_string + "</pre><br><br>";
     
 	page_span.innerHTML = ""; // Whats this?
     
         if (page == 1) {
-            btn_prev.style.visibility = "hidden";
+            btn_prev.style.visibility = "visible";
+            btn_next.style.color = "#707070";
         } else {
             btn_prev.style.visibility = "visible";
+            btn_next.style.color = "#0000EE";
         }
     
         if (page == pageCount) {
-            btn_next.style.visibility = "hidden";
+            btn_next.style.visibility = "visible";
+            btn_next.style.color = "#707070";
         } else {
             btn_next.style.visibility = "visible";
+            btn_next.style.color = "#0000EE";
         }
 
-	    listing_table.innerHTML += "<br><br>Please help improve this explorer UI: <A href=\"https://github.com/bladedoyle/grin_ipfs_explorer\">github</a>"
+	    listing_table.innerHTML += "<br><br>Please help improve this explorer UI: <A href=\"https://github.com/bladedoyle/grin_ipfs_explorer\">github</a><br><br>"
     }
     
     // Get content of url as json
     function getJson(url){
       var request = new XMLHttpRequest();
-      request.open('GET', 'https://grinblocks.online/ipns/k51qzi5uqu5di6j7rwnp4b2bb98nh1dwypwaymemx044kwnap8d0p1qmghhjpf/'+url, false);
+      request.open('GET', base_url+'/'+url, false);
       request.send(null);
       return JSON.parse(request.responseText);
     }
