@@ -47,11 +47,9 @@
     
         listing_table.innerHTML = "";
     
-        //listing_table.innerHTML += "Chain Height: " + pageCount + "<br>";
-
 	var block_data = getBlockData(page)
 	var block_string = JSON.stringify(block_data,null,'\t');
-	    listing_table.innerHTML += "Block Data for height " + page + ":<br><br>" + block_string + "<br><br>";
+	    listing_table.innerHTML += "Viewing Block Data for height " + page + "(of " +pageCount + "):<br><br>" + block_string + "<br><br>";
     
 	page_span.innerHTML = ""; // Whats this?
     
@@ -66,6 +64,8 @@
         } else {
             btn_next.style.visibility = "visible";
         }
+
+	    listing_table.innerHTML += "<br><br>Please help improve this explorer UI: <A href=\"https://github.com/bladedoyle/grin_ipfs_explorer\">github</a>"
     }
     
     // Get content of url as json
