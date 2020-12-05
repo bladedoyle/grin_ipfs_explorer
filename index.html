@@ -14,6 +14,13 @@
     <a href="javascript:prevPage()" id="btn_prev">Previous</a>
     &nbsp;&nbsp;
     <a href="javascript:nextPage()" id="btn_next">Next</a>
+    &nbsp;&nbsp; -- &nbsp;&nbsp;
+    <a href="javascript:firstPage()" id="btn_first">First</a>
+    &nbsp;&nbsp;
+    <a href="javascript:lastPage()" id="btn_last">Last</a>
+    &nbsp;&nbsp; -- &nbsp;&nbsp;
+    <a href="javascript:jumpToPage()" id="btn_jtp">JumpTo</a>
+    <input name="jumpTo" type="text" size="10" id="jumpTo" class="jumpTo"/>
     <br><br>
     <div id="listingTable"></div>
     <span id="page"></span>
@@ -41,6 +48,35 @@
         }
     }
 
+    
+    function firstPage()
+    {
+        current_page = 0
+        changePage(current_page);
+    }
+
+    function lastPage()
+    {
+        current_page = pageCount
+        changePage(current_page);
+    }
+
+
+    function jumpToPage()
+    {
+	var page = document.getElementsByClassName("jumpTo")[0].value;
+	if(!page) {
+	    document.getElementsByClassName("jumpTo")[0].value = current_page
+	    return;
+	}
+	page_int = parseInt(page)
+        if(isNaN(page_int)) {
+	    document.getElementsByClassName("jumpTo")[0].value = current_page
+	    return;
+        }
+	changePage(current_page)
+    }
+
     function changePage(page)
     {
         var btn_next = document.getElementById("btn_next");
@@ -49,37 +85,39 @@
         var page_span = document.getElementById("page");
     
         // Validate page
-        if (page < 1) page = 1;
+        if (page < 0) page = 0;
         if (page > pageCount) page = pageCount;
-    
+
+	// Init
+	document.getElementsByClassName("jumpTo")[0].value = "";
         listing_table.innerHTML = "";
-    
+
+	// Fetch and format block data
 	var block_data = getBlockData(page)
-
-	// BUG:  I think JSON.stringify() is sorting the values in the cuckoo_solution list so tahts not good
 	var block_string = JSON.stringify(block_data,null,'\t');
-
-        listing_table.innerHTML += "Viewing Block Data for height " + page + " (of " +pageCount + "):<br><br><pre>" + block_string + "</pre><br><br>";
+	listing_table.innerHTML += "Viewing Block Data for height <b>" + page + "</b> (of " +pageCount + "):";
+	listing_table.innerHTML += "<br><br>";
+        listing_table.innerHTML += "<pre>" + block_string + "</pre>";
+	listing_table.innerHTML += "<br><br>";
     
 	page_span.innerHTML = ""; // Whats this?
     
-        if (page == 1) {
-            btn_prev.style.visibility = "visible";
-            btn_next.style.color = "#707070";
+	// Manage the bittons - grey out invlid direction from current block
+        if (page == 0) {
+            btn_prev.style.color = "#707070";
         } else {
-            btn_prev.style.visibility = "visible";
-            btn_next.style.color = "#0000EE";
+            btn_prev.style.color = "#0000EE";
         }
     
         if (page == pageCount) {
-            btn_next.style.visibility = "visible";
             btn_next.style.color = "#707070";
         } else {
-            btn_next.style.visibility = "visible";
             btn_next.style.color = "#0000EE";
         }
 
-	    listing_table.innerHTML += "<br><br>Please help improve this explorer UI: <A href=\"https://github.com/bladedoyle/grin_ipfs_explorer\">github</a><br><br>"
+	// Beg for help for this pathetic webui.  Please help add some color at least :-|
+        listing_table.innerHTML += "<br><br>"
+	listing_table.innerHTML += "Please help improve this explorer UI: <A href=\"https://github.com/bladedoyle/grin_ipfs_explorer\">github</a>"
     }
     
     // Get content of url as json
