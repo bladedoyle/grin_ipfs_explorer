@@ -8,6 +8,8 @@
 
   <body>
     <h1>Grin Blockchain Explorer on IPFS</h1>
+    (alpha relase - do not trust this data yet)
+    <br><br>
     Block Navigation:&nbsp;&nbsp;
     <a href="javascript:prevPage()" id="btn_prev">Previous</a>
     &nbsp;&nbsp;
@@ -53,6 +55,8 @@
         listing_table.innerHTML = "";
     
 	var block_data = getBlockData(page)
+
+	// BUG:  I think JSON.stringify() is sorting the values in the cuckoo_solution list so tahts not good
 	var block_string = JSON.stringify(block_data,null,'\t');
 
         listing_table.innerHTML += "Viewing Block Data for height " + page + " (of " +pageCount + "):<br><br><pre>" + block_string + "</pre><br><br>";
@@ -81,15 +85,25 @@
     // Get content of url as json
     function getJson(url){
       var request = new XMLHttpRequest();
-      request.open('GET', base_url+'/'+url, false);
-      request.send(null);
-      return JSON.parse(request.responseText);
+      try {
+        request.open('GET', base_url+'/'+url, false);
+        request.send(null);
+        return JSON.parse(request.responseText);
+      }
+      catch(err) {
+        return null
+      }
     }
 
     // Get num blocks
     function getNumBlocks() {
       var height_data = getJson('height') 
-      return parseInt(height_data["height"])
+      try {
+        return parseInt(height_data["height"])
+      }
+      catch {
+        return null
+      }
     }
 
     // Get block by height as JSON

@@ -12,6 +12,9 @@ from pathlib import Path
 from threading import Thread
 from datetime import datetime, timedelta
 
+# XXX TODO - Add mutex around data shared by main and "ipfs add" threads
+# XXX TODO - Forks
+
 class IpfsExplorer():
     def __init__(self):
         # Node Credentials
@@ -27,6 +30,8 @@ class IpfsExplorer():
         self.block_data_dir = "/data/ipfs_explorer/blocks"
         # Dont change this
         self.group_size = 10000   # Number of files per directory
+        #---
+        self.running_ipfs_add = False
 
     # Get the height of chain tip from grin node
     def get_chain_height(self):
@@ -113,7 +118,11 @@ class IpfsExplorer():
             return False # Nothing added
         return True # Added block data
 
+    # Track the blockchain height
     def update_height(self, height):
+        # Skip this if we are in the middle of an ipfs add
+        if self.running_ipfs_add:
+            return
         h_file = self.block_data_dir + "/height"
         height = int(height)
         try:
@@ -132,6 +141,7 @@ class IpfsExplorer():
 
     def ipfs_add_and_publish(self):
         print("ipfs_add_and_publish()")
+        self.running_ipfs_add = True
         cmd = ["timeout", "300m", "/data/ipfs_explorer/bin/ipfs", "add", "-r", self.block_data_dir]
         try:
             message = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=False).decode('utf-8')
@@ -143,6 +153,8 @@ class IpfsExplorer():
         except Exception as e:
             print("Error ipfs add -r data: {}".format(e))
             return
+        finally:
+            self.running_ipfs_add = False
         cmd = ["timeout", "300m", "/data/ipfs_explorer/bin/ipfs", "name", "publish", m[0]]
         try:
             message = subprocess.check_output(cmd, stderr=subprocess.STDOUT, shell=False).decode('utf-8')
