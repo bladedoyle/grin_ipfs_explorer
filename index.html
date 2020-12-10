@@ -31,12 +31,13 @@
     var base_url = window.location.origin + "/ipns/k51qzi5uqu5di6j7rwnp4b2bb98nh1dwypwaymemx044kwnap8d0p1qmghhjpf" // + window.location.pathname.split( '/' )[2]
     var pageCount = getNumBlocks();
     var current_page = pageCount;
+    var cache = {};
 
     function prevPage()
     {
         if (current_page > 0) {
             current_page--;
-            changePage(current_page);
+            renderPage();
         }
     }
 
@@ -44,7 +45,7 @@
     {
         if (current_page < pageCount) {
             current_page++;
-            changePage(current_page);
+            renderPage();
         }
     }
 
@@ -52,13 +53,13 @@
     function firstPage()
     {
         current_page = 0
-        changePage(current_page);
+        renderPage();
     }
 
     function lastPage()
     {
         current_page = pageCount
-        changePage(current_page);
+        renderPage();
     }
 
 
@@ -75,10 +76,10 @@
 	    return;
         }
 	current_page = page
-	changePage(current_page)
+	renderPage()
     }
 
-    function changePage(page)
+    function renderPage()
     {
         var btn_next = document.getElementById("btn_next");
         var btn_prev = document.getElementById("btn_prev");
@@ -86,31 +87,31 @@
         var page_span = document.getElementById("page");
     
         // Validate page number
-        if (page < 0) page = 0;
-        if (page > pageCount) page = pageCount;
+        if (current_page < 0) current_page = 0;
+        if (current_page > pageCount) current_page = pageCount;
 
 	// Init
 	document.getElementsByClassName("jumpTo")[0].value = "";
         listing_table.innerHTML = "";
 
 	// Fetch and format block data
-	var block_data = getBlockData(page)
+	var block_data = getBlockData(current_page)
 	var block_string = JSON.stringify(block_data,null,'\t');
-	listing_table.innerHTML += "Viewing Block Data for height <b>" + page + "</b> (of " +pageCount + "):";
+	listing_table.innerHTML += "Viewing Block Data for height <b>" + current_page + "</b> (of " +pageCount + "):";
 	listing_table.innerHTML += "<br><br>";
         listing_table.innerHTML += "<pre>" + block_string + "</pre>";
 	listing_table.innerHTML += "<br><br>";
-    
+
 	page_span.innerHTML = ""; // Whats this?
     
 	// Manage the buttons - grey out invlid direction from current block
-        if (page == 0) {
+        if (current_page == 0) {
             btn_prev.style.color = "#707070";
         } else {
             btn_prev.style.color = "#0000EE";
         }
     
-        if (page == pageCount) {
+        if (current_page == pageCount) {
             btn_next.style.color = "#707070";
         } else {
             btn_next.style.color = "#0000EE";
@@ -123,37 +124,50 @@
     
     // Get content of url as json
     function getJson(url){
-      var request = new XMLHttpRequest();
       try {
-        request.open('GET', base_url+'/'+url, false);
-        request.send(null);
-        return JSON.parse(request.responseText);
+        $.get(base_url+'/'+url, function(data, status) {
+	    if(data === undefined) {
+                console.log("Hello undefined world!");
+                return
+            }
+            height = data["header"]["height"]
+            cache[height] = data;
+            renderPage();
+            console.log("Hello good world!");
+          });
       }
       catch(err) {
-        return null
+        return null;
       }
     }
 
     // Get num blocks
     function getNumBlocks() {
-      var height_data = getJson('height') 
+      var request = new XMLHttpRequest();
       try {
-        return parseInt(height_data["height"])
+        request.open('GET', base_url+'/height', false);
+        request.send(null);
+        var height_data = JSON.parse(request.responseText);
+        return parseInt(height_data["height"]);
       }
-      catch {
-        return null
+      catch(err) {
+        return null;
       }
     }
 
     // Get block by height as JSON
+    //   # XXX TODO:  support more fork versions
     function getBlockData(height) {
+      if(height in cache) {
+          return cache[height]
+      }
       var dir = Math.trunc(parseInt(height) / 10000)
       var data = getJson(dir + '/' + height)
-      return data
+      return "loading block data for height: "+height
     }
 
 window.onload = function() {
-    changePage(pageCount);
+    renderPage();
 };
   </script>
 </html>
