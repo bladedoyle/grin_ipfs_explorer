@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <title>Grin Blockchain Explorer on IPFS</title>
-    <script language="javascript"  src="http://code.jquery.com/jquery-1.4.2.min.js"></script>
+    <script language="javascript"  src="https://code.jquery.com/jquery-1.4.2.min.js"></script>
   </head>
 
   <body>
@@ -34,7 +34,7 @@
 
     function prevPage()
     {
-        if (current_page > 1) {
+        if (current_page > 0) {
             current_page--;
             changePage(current_page);
         }
@@ -70,7 +70,7 @@
 	    return;
 	}
 	page_int = parseInt(page)
-        if(isNaN(page_int)) {
+        if(isNaN(page_int) || page_int < 0 || page_int > pageCount) {
 	    document.getElementsByClassName("jumpTo")[0].value = current_page
 	    return;
         }
@@ -85,7 +85,7 @@
         var listing_table = document.getElementById("listingTable");
         var page_span = document.getElementById("page");
     
-        // Validate page
+        // Validate page number
         if (page < 0) page = 0;
         if (page > pageCount) page = pageCount;
 
@@ -103,7 +103,7 @@
     
 	page_span.innerHTML = ""; // Whats this?
     
-	// Manage the bittons - grey out invlid direction from current block
+	// Manage the buttons - grey out invlid direction from current block
         if (page == 0) {
             btn_prev.style.color = "#707070";
         } else {
