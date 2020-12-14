@@ -54,40 +54,48 @@ class IpfsExplorer():
             return None
         return chain_height
 
-    # Calculate data directory for a given block heaigh
+    # Calculate data directory for a given block height
     def height_to_dirname(self, height):
         subdir = int(height / self.group_size)
         return("{}/{}".format(self.block_data_dir, subdir))
 
-    # Write block data to file
-    def write_block_data(self, data, fork=0):
+    # Write block data to file - possibly as a fork
+    def write_block_data(self, data):
         height = data["header"]["height"]
+        existing = self.read_block_data(height)
+        for existing_ver in existing:
+            if self.same_block_data(data, existing_ver):
+                return False
+        # This version does not exist yet - write it out
         dname = self.height_to_dirname(height)
         if not os.path.exists(dname):
+            print("Create new subdir: {}".format(dname))
             os.makedirs(dname)
         fname = "{}/{}".format(dname, height)
-        if fork:
-            fname = fname + "_fork{}".format(fork)
-        f = open(fname, "w")
-        f.write(json.dumps(data))
-        f.close()
+        fork_num = len(existing)
+        if fork_num > 0:
+            fname = fname + "_fork{}".format(fork_num)
+        theFile = open(fname, "w")
+        theFile.write(json.dumps(data))
+        theFile.close()
+        print("Wrote block data: {}".format(fname))
+        return True
     
-    # Read block data
-    # XXX TODO: remove fork argument, return all fork versions in an array ?
-    def read_block_data(self, height, fork=0):
+    # Read block data (all fork versions)
+    def read_block_data(self, height):
         dname = self.height_to_dirname(height)
-        fname = "{}/{}".format(dname, height)
-        if fork != 0:
-            fname = fname + "_fork{}".format(fork)
-        if not os.path.exists(fname):
-            return None
-        f = open(fname, "r")
-        x = f.readline()
-        f.close()
-        j = json.loads(x)
-        if int(j["header"]["height"]) != height:
-            return None
-        return j
+        block_data = []
+        for fork in range(420):
+            fname = "{}/{}".format(dname, height)
+            if fork != 0:
+                fname = fname + "_fork{}".format(fork)
+            if not os.path.exists(fname):
+                break
+            theFile = open(fname, "r")
+            data = theFile.readline()
+            theFile.close()
+            block_data = block_data + [json.loads(data)]
+        return block_data
 
     # Compare if 2 blocks are the same
     def same_block_data(self, a, b):
@@ -99,45 +107,39 @@ class IpfsExplorer():
     def get_and_process_block(self, height):
         payload = {"jsonrpc": "2.0", "method": "get_block", "params": [height, None, None], "id": 1}
         try:
-            x=requests.post(self.grin_url, auth=self.node_auth, json=payload, timeout=20)
-            block = x.json()["result"]["Ok"]
+            req = requests.post(
+                    self.grin_url,
+                    auth=self.node_auth,
+                    json=payload,
+                    timeout=20)
+            block = req.json()["result"]["Ok"]
+            if int(block["header"]["height"]) != height:
+                raise Exception("Failed to get block data from node")
         except Exception as e:
             print("Error: {}".format(e))
             raise
-        existing = self.read_block_data(height)
-        if existing is None:
-            self.write_block_data(block, False)
-            print("Wrote Block: {}".format(block["header"]["height"]))
-        # XXX TODO:  support more fork versions
-        elif not self.same_block_data(block, existing):
-            existing_fork = self.read_block_data(height, fork=1)
-            if not self.same_block_data(block, existing_fork):
-                self.write_block_data(block, fork=1)
-                print("Wrote Block as fork: {}".format(block["header"]["height"]))
-        else:
-            return False # Nothing added
-        return True # Added block data
+        return self.write_block_data(block)
 
     # Track the blockchain height
     def update_height(self, height):
         # Skip this if we are in the middle of an ipfs add
         if self.running_ipfs_add:
-            return
+            return False
         h_file = self.block_data_dir + "/height"
         height = int(height)
         try:
-            f = open(h_file, "r")
-            j = f.read()
-            h = int(json.loads(j)["height"])
-            f.close()
-            if height <= h:
+            theFile = open(h_file, "r")
+            jsn = theFile.read()
+            theFile.close()
+            existing_height = int(json.loads(jsn)["height"])
+            if height <= existing_height:
                 return
         except Exception as e:
             print("Failed to grok existing height file: {}".format(e))
-        j = { "height": height }
-        f = open(h_file, "w")
-        f.write(json.dumps(j))
-        f.close()
+        jsn = { "height": height }
+        theFile = open(h_file, "w")
+        theFile.write(json.dumps(jsn))
+        theFile.close()
 
     def ipfs_add_and_publish(self):
         print("ipfs_add_and_publish()")
@@ -149,7 +151,7 @@ class IpfsExplorer():
             if len(m) != 1:
                 print("Failed to get hash for ipfs add -r blocks: {}".format(message))
                 return
-            print("add hash = {}".format(m[0]))
+            print("added hash = {}".format(m[0]))
         except Exception as e:
             print("Error ipfs add -r data: {}".format(e))
             return
@@ -163,6 +165,10 @@ class IpfsExplorer():
             print("Error ipfs publish: {}".format(e))
             return
 
+    # Is any scheduled scan running?
+    def any_running(self):
+        return self.full_scan_st["is_running"] or self.week_scan_st["is_running"] or self.day_scan_st["is_running"] or self.hour_scan_st["is_running"] or self.min_scan_st["is_running"]
+
     def run(self):
         # Disable stdout line buffering so log messages are printed in realtime
         sys.stdout.reconfigure(line_buffering=True)
@@ -175,21 +181,22 @@ class IpfsExplorer():
     
         # Test node API connection
         chain_height = self.get_chain_height()
-        if chain_height is None:
-            print("Failed to connect to grin node foreign api.  Can not continue")
-            sys.exit(1)
+        while chain_height is None:
+            print("Failed to connect to grin node foreign api.  Will retry....")
+            chain_height = self.get_chain_height()
+            time.sleep(self.loop_delay)
 
         # Initialize scheduled scan status structures
-        full_scan_st = {"height":chain_height, "date":datetime.now()}
-        week_scan_st = {"height":chain_height, "date":datetime.now()}
-        day_scan_st = {"height":chain_height-DAY_BLOCKS, "date":datetime(1970, 1, 1)}
-        hour_scan_st = {"height":chain_height-HOUR_BLOCKS, "date":datetime(1970, 1, 1)}
-        min_scan_st = {"height":chain_height-1, "date":datetime(1970, 1, 1)}
-        publish_st = {"dirty":False, "date":datetime(1970, 1, 1)}
-    
+        never = datetime(1970, 1, 1)
+        self.full_scan_st = {"height":0, "date":never, "is_running": False}
+        self.week_scan_st = {"height":chain_height-WEEK_BLOCKS, "date":never, "is_running": False}
+        self.day_scan_st = {"height":chain_height-DAY_BLOCKS, "date":never, "is_running": False}
+        self.hour_scan_st = {"height":chain_height-HOUR_BLOCKS, "date":never, "is_running": False}
+        self.min_scan_st = {"height":chain_height-1, "date":never, "is_running": False}
+        self.publish_st = {"dirty":False, "date":never}
+
         while True:
             # Init loop variables
-            any_running = False  # Any active scheduled scan?
             any_new = False      # Any new data written in this time around the loop?
         
             # Get current chain height
@@ -200,70 +207,80 @@ class IpfsExplorer():
 
             try:
                 # Scan Full blockchain
-                if datetime.now() - full_scan_st["date"] > timedelta(weeks=2):
-                    any_running = True
-                    any_new = any_new or self.get_and_process_block(full_scan_st["height"])
-                    if chain_height <= full_scan_st["height"] + 1:
-                        full_scan_st["height"] = 0
-                        full_scan_st["date"] = datetime.now()
+                if datetime.now() - self.full_scan_st["date"] > timedelta(weeks=2):
+                    self.full_scan_st["is_running"] = True
+                    any_new = any_new or self.get_and_process_block(self.full_scan_st["height"])
+                    if chain_height <= self.full_scan_st["height"] + 1:
+                        self.full_scan_st["height"] = 0
+                        self.full_scan_st["date"] = datetime.now()
+                        self.full_scan_st["is_running"] = False
+                        print("Completed Full Scan")
                     else:
-                        full_scan_st["height"] = full_scan_st["height"] + 1
+                        self.full_scan_st["height"] = self.full_scan_st["height"] + 1
 
                 # Scan blocks from the past Week
-                if datetime.now() - week_scan_st["date"] > timedelta(days=3):
-                    any_running = True
-                    any_new = any_new or self.get_and_process_block(week_scan_st["height"])
-                    if chain_height <= week_scan_st["height"] + 1:
-                        week_scan_st["height"] = chain_height - WEEK_BLOCKS
-                        week_scan_st["date"] = datetime.now()
+                if datetime.now() - self.week_scan_st["date"] > timedelta(days=3):
+                    self.week_scan_st["is_running"] = True
+                    any_new = any_new or self.get_and_process_block(self.week_scan_st["height"])
+                    if chain_height <= self.week_scan_st["height"] + 1:
+                        self.week_scan_st["height"] = chain_height - WEEK_BLOCKS
+                        self.week_scan_st["date"] = datetime.now()
+                        self.week_scan_st["is_running"] = False
+                        print("Completed Week Scan")
                     else:
-                        week_scan_st["height"] = week_scan_st["height"] + 1
+                        self.week_scan_st["height"] = self.week_scan_st["height"] + 1
 
                 # Scan blocks from the past Day 
-                if datetime.now() - day_scan_st["date"] > timedelta(hours=8):
-                    any_running = True
-                    any_new = any_new or self.get_and_process_block(day_scan_st["height"])
-                    if chain_height <= day_scan_st["height"] + 1:
-                        day_scan_st["height"] = chain_height - DAY_BLOCKS
-                        day_scan_st["date"] = datetime.now()
+                if datetime.now() - self.day_scan_st["date"] > timedelta(hours=8):
+                    self.day_scan_st["is_running"] = True
+                    any_new = any_new or self.get_and_process_block(self.day_scan_st["height"])
+                    if chain_height <= self.day_scan_st["height"] + 1:
+                        self.day_scan_st["height"] = chain_height - DAY_BLOCKS
+                        self.day_scan_st["date"] = datetime.now()
+                        self.day_scan_st["is_running"] = False
+                        print("Completed Day Scan")
                     else:
-                        day_scan_st["height"] = day_scan_st["height"] + 1
+                        self.day_scan_st["height"] = self.day_scan_st["height"] + 1
 
                 # Scan blocks from the last hour
-                if datetime.now() - hour_scan_st["date"] > timedelta(hours=2):
-                    any_running = True
-                    any_new = any_new or self.get_and_process_block(hour_scan_st["height"])
-                    if chain_height <= hour_scan_st["height"] + 1:
-                        hour_scan_st["height"] = chain_height - HOUR_BLOCKS
-                        hour_scan_st["date"] = datetime.now()
+                if datetime.now() - self.hour_scan_st["date"] > timedelta(hours=2):
+                    self.hour_scan_st["is_running"] = True
+                    any_new = any_new or self.get_and_process_block(self.hour_scan_st["height"])
+                    if chain_height <= self.hour_scan_st["height"] + 1:
+                        self.hour_scan_st["height"] = chain_height - HOUR_BLOCKS
+                        self.hour_scan_st["date"] = datetime.now()
+                        self.hour_scan_st["is_running"] = False
+                        print("Completed Hour Scan")
                     else:
-                        hour_scan_st["height"] = hour_scan_st["height"] + 1
+                        self.hour_scan_st["height"] = self.hour_scan_st["height"] + 1
 
                 # Scan for new blocks continuously
-                if datetime.now() - min_scan_st["date"] > timedelta(seconds=30):
-                    if min_scan_st["height"] <= chain_height:
-                        any_running = True
-                        any_new = any_new or self.get_and_process_block(min_scan_st["height"])
-                        min_scan_st["date"] = datetime.now()
-                        min_scan_st["height"] = min_scan_st["height"] + 1
+                if datetime.now() - self.min_scan_st["date"] > timedelta(seconds=30):
+                    if self.min_scan_st["height"] <= chain_height:
+                        self.min_scan_st["is_running"] = True
+                        any_new = any_new or self.get_and_process_block(self.min_scan_st["height"])
+                        self.min_scan_st["date"] = datetime.now()
+                        self.min_scan_st["height"] = self.min_scan_st["height"] + 1
+                    else:
+                        self.min_scan_st["is_running"] = False
         
                 # Accounting
                 if any_new:
-                    self.update_height(min_scan_st["height"]-1)
-                    publish_st["dirty"] = True
+                    self.update_height(self.min_scan_st["height"]-1)
+                    self.publish_st["dirty"] = True
         
                 # Launch a thread to Add new block data to IPFS and publish to IPNS
-                if not any_running:
-                    if publish_st["dirty"] and datetime.now() - publish_st["date"] > timedelta(hours=6):
+                if not self.any_running():
+                    if self.publish_st["dirty"] and datetime.now() - self.publish_st["date"] > timedelta(hours=6):
                         print("add and publish to ipfs")
                         ipfs_add_thread = Thread(target = self.ipfs_add_and_publish)
                         ipfs_add_thread.daemon = True
                         ipfs_add_thread.start()
-                        publish_st["dirty"] = False
-                        publish_st["date"] = datetime.now()
+                        self.publish_st["dirty"] = False
+                        self.publish_st["date"] = datetime.now()
         
                 # Throttle polling for new blocks if no scan is actively running
-                if not any_running:
+                if not self.any_running():
                     time.sleep(self.loop_delay)
             except Exception as e:
                 print("Error: {} - {}".format(e, traceback.format_exc()))
